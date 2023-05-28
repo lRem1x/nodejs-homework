@@ -1,62 +1,77 @@
-const fs = require("fs/promises");
-const path = require("path");
-const contactsPath = path.join(__dirname, "contacts.json");
-const { nanoid } = require("nanoid");
+// Mongoose model - is a noun in a single form, so we name the file contact.js
+const { Schema, model } = require("mongoose");
+const Joi = require("joi");
+const { handleMongooseError } = require("../helpers");
 
-const listContacts = async () => {
-  const contacts = await fs.readFile(contactsPath);
-  return JSON.parse(contacts);
-};
+const phoneRegex = /^\(\d{3}\) \d{3}-\d{4}$/;
 
-const getContactById = async (contactId) => {
-  const allContacts = await listContacts();
-  return allContacts.find((item) => item.id === contactId) || null;
-};
-
-const removeContact = async (contactId) => {
-  const allContacts = await listContacts();
-  const index = allContacts.findIndex((item) => item.id === contactId);
-
-  if (index === -1) {
-    return null;
+// we create a new schema using "new", because we need it for ES6 modules
+const contactSchema = new Schema(
+  {
+    name: {
+      type: String,
+      required: [true, "Set name for contact"],
+    },
+    email: {
+      type: String,
+    },
+    phone: {
+      type: String,
+    },
+    // if this field is not submitted, default value will be false
+    favorite: {
+      type: Boolean,
+      default: false,
+    },
+  },
+  {
+    // removes "_v" and adds creation and changing timestamps to document
+    versionKey: false,
+    timestamps: true,
   }
+);
 
-  const [result] = allContacts.splice(index, 1);
-  await fs.writeFile(contactsPath, JSON.stringify(allContacts, null, 2));
+// Validates body for POST method
+const addContactSchema = Joi.object({
+  name: Joi.string().min(3).max(20).required(),
+  email: Joi.string()
+    .email({
+      minDomainSegments: 2,
+    })
+    .required(),
+  phone: Joi.string()
+    .regex(phoneRegex, "Phone number must be in the format (123) 456-7890")
+    .required(),
+  favorite: Joi.boolean(),
+});
 
-  return result;
-};
+// Validates body for PUT method
+const updateContactSchema = Joi.object({
+  name: Joi.string().min(3).max(20),
+  email: Joi.string().email({
+    minDomainSegments: 2,
+  }),
+  phone: Joi.string().regex(
+    phoneRegex,
+    "Phone number must be in the format (123) 456-7890"
+  ),
+  favorite: Joi.boolean(),
+});
 
-const addContact = async ({ name, email, phone }) => {
-  const allContacts = await listContacts();
-  const newContact = { id: nanoid(), name, email, phone };
+// Validates body for PATCH method
+const updateStatusContactSchema = Joi.object({
+  favorite: Joi.boolean().required(),
+});
 
-  allContacts.push(newContact);
-  await fs.writeFile(contactsPath, JSON.stringify(allContacts, null, 2));
+// if during saving we have an error, this middleware is set, otherwise mongoose error doesn't set error.status
+contactSchema.post("save", handleMongooseError);
 
-  return newContact;
-};
-
-const updateContact = async (contactId, data) => {
-  const allContacts = await listContacts();
-
-  const index = allContacts.findIndex((item) => item.id === contactId);
-
-  if (index === -1) {
-    return null;
-  }
-
-  allContacts[index] = { ...allContacts[index], ...data };
-
-  await fs.writeFile(contactsPath, JSON.stringify(allContacts, null, 2));
-
-  return allContacts[index];
-};
+// model() method creates a model of the Schema. It is a Class, so we use capital letter. 1st argument - name of the collection of DB in a single form, 2nd - schema
+const Contact = model("contact", contactSchema);
 
 module.exports = {
-  listContacts,
-  getContactById,
-  removeContact,
-  addContact,
-  updateContact,
+  Contact,
+  addContactSchema,
+  updateContactSchema,
+  updateStatusContactSchema,
 };
