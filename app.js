@@ -1,9 +1,10 @@
-require("dotenv").config(); /** config() method searches .env file in the project, reads variables and adds them to process.env */
 const express = require("express");
 const logger = require("morgan");
 const cors = require("cors");
+require("dotenv").config();
 
 const contactsRouter = require("./routes/api/contacts");
+const authRouter = require("./routes/api/auth");
 
 const app = express();
 
@@ -11,9 +12,9 @@ const formatsLogger = app.get("env") === "development" ? "dev" : "short";
 
 app.use(logger(formatsLogger));
 app.use(cors());
-
-// Checks if request has a body, and if it has, it checks content type from Header, if it's json, it converts the string to an object using JSON.parse()
 app.use(express.json());
+
+app.use("/api/auth", authRouter);
 
 app.use("/api/contacts", contactsRouter);
 
@@ -23,7 +24,6 @@ app.use((req, res) => {
 
 app.use((err, req, res, next) => {
   const { status = 500, message = "Server error" } = err;
-
   res.status(status).json({ message });
 });
 
